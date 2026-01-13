@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-zafira-background text-zafira-text font-sans antialiased;
+  background-color: #0f0518;
+  background-image:
+    radial-gradient(at 0% 0%, hsla(280, 100%, 20%, 0.5) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(270, 100%, 30%, 0.3) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(260, 100%, 10%, 1) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, hsla(270, 100%, 20%, 0.5) 0px, transparent 50%);
+  min-height: 100vh;
+}
+
+input,
+select,
+textarea {
+  @apply bg-zafira-surface border border-zafira-muted rounded px-4 py-2 text-zafira-text focus:outline-none focus:border-zafira-highlight transition-colors;
+}
+
+label {
+  @apply block text-sm font-medium text-zafira-muted mb-1;
+}
+
+@layer utilities {
+  .animate-border-spin {
+    animation: border-spin 4s linear infinite;
+  }
+
+  .animate-slide-in-right {
+    animation: slide-in-right 0.5s ease-out forwards;
+  }
+
+  .animate-pulse-slow {
+    animation: pulse 6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+@keyframes border-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

@@ -1,0 +1,59 @@
+{
+    "name": "Envio de Contrato Zafira",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "send-contract",
+                "options": {
+                    "binaryPropertyName": "file"
+                }
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ],
+            "id": "webhook-trigger",
+            "name": "Receber Contrato"
+        },
+        {
+            "parameters": {
+                "resource": "message",
+                "subject": "📄 Seu Contrato Assinado - Zafira",
+                "message": "Olá,\n\nSegue em anexo o seu contrato assinado digitalmente com a Zafira Comunicação.\n\nAtenciosamente,\nEquipe Zafira",
+                "toEmail": "={{ $json.body.email }}",
+                "attachments": "file",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.gmail",
+            "typeVersion": 2.1,
+            "position": [
+                470,
+                300
+            ],
+            "id": "send-email",
+            "name": "Enviar Email (Gmail)",
+            "credentials": {
+                "gmailOAuth2": {
+                    "id": "YOUR_CREDENTIAL_ID",
+                    "name": "Gmail account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Receber Contrato": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar Email (Gmail)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

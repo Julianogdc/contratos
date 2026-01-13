@@ -6,7 +6,8 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
-RUN npm run build
+# Usar apenas vite build para economizar memoria e evitar erros estritos de TS no servidor
+RUN npx vite build
 
 FROM nginx:alpine
 

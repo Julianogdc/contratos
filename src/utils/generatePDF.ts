@@ -3,6 +3,60 @@ import type { ContractData } from '../types';
 
 
 
+// Helper to load image
+const loadImage = (url: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "Anonymous"; // Restore for external URLs
+        img.onload = () => resolve(img);
+        img.onerror = (e) => {
+            console.error("Image load error for url:", url, e);
+            reject(e);
+        };
+        // Cache bust to ensure fresh CORS request
+        const separator = url.includes('?') ? '&' : '?';
+        img.src = `${url}${separator}t=${new Date().getTime()}`;
+    });
+};
+
+// Helper to ensure signature is black (fix for white/light signatures on white paper)
+const ensureImageIsBlack = (img: HTMLImageElement): string => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return img.src;
+
+    ctx.drawImage(img, 0, 0);
+
+    // Get image data
+    let imageData;
+    try {
+        imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    } catch (e) {
+        console.error("Canvas tainted, returning original image", e);
+        return img.src;
+    }
+
+    const data = imageData.data;
+
+    // Force ALL non-transparent pixels to be PURE BLACK OPAQUE
+    // We assume the signature is likely white or light colored on transparent bg
+    for (let i = 0; i < data.length; i += 4) {
+        // If pixel determines ANY visibility (Alpha > 5)
+        // If pixel determines ANY visibility (Alpha > 5)
+        if (data[i + 3] > 5) {
+            data[i] = 0;       // R -> Black
+            data[i + 1] = 0;   // G
+            data[i + 2] = 0;   // B
+            data[i + 3] = 255; // Alpha -> Fully Opaque (BOLD)
+        }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas.toDataURL('image/png');
+};
+
 export const generateContractPDF = async (data: ContractData, contractorSignature: string | null, clientSignature: string | null, logoSrc: string | null, includeAuditLog: boolean = true, returnBlob: boolean = false) => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
@@ -24,7 +78,8 @@ export const generateContractPDF = async (data: ContractData, contractorSignatur
             const logoWidth = 50;
             const logoHeight = 16;
             const logoX = (pageWidth - logoWidth) / 2;
-            doc.addImage(logoSrc, 'PNG', logoX, 10, logoWidth, logoHeight);
+            const logoImg = await loadImage(logoSrc);
+            doc.addImage(logoImg, 'PNG', logoX, 10, logoWidth, logoHeight);
         } catch (e) {
             console.error("Logo add failed", e);
             // Fallback text if logo fails
@@ -248,7 +303,14 @@ export const generateContractPDF = async (data: ContractData, contractorSignatur
 
     if (contractorSignature) {
         try {
-            doc.addImage(contractorSignature, 'PNG', margin + 5, sigY - 25, 40, 20);
+            // Preload image
+            const imgEl = await loadImage(contractorSignature);
+
+            // Fix Color: FORCE BLACK AND BOLD
+            const correctedSignature = ensureImageIsBlack(imgEl);
+
+            doc.addImage(correctedSignature, 'PNG', margin + 5, sigY - 25, 40, 20);
+
         } catch (e) {
             console.error("Error adding contractor signature", e);
         }

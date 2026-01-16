@@ -5,7 +5,6 @@ import { db } from '../lib/firebase';
 import type { ContractData } from '../types';
 import SignatureCanvas from 'react-signature-canvas';
 import { generateContractPDF } from '../utils/generatePDF';
-// Removed generateContractPDF as it is no longer used here.
 import zafiraSignature from '../assets/zafira-signature.png';
 import zafiraLogo from '../assets/zafira-logo.png';
 import { ShieldCheck, X, CheckCircle, AlertTriangle, Info } from 'lucide-react';
@@ -96,9 +95,10 @@ export function ClientContractView() {
         sigCanvas.current?.clear();
     };
 
-    const handleSign = async () => {
-        // console.log("handleSign initiated");
+    // N8N WEBHOOK URL - Replace with actual URL
+    const N8N_WEBHOOK_URL = "https://contratos-n8n.hvrb9d.easypanel.host/webhook/send-contract";
 
+    const handleSign = async () => {
         if (!termsAccepted) {
             showToast("⚠️ Por favor, leia e aceite os Termos e Condições para continuar.", 'error');
             return;
@@ -115,7 +115,6 @@ export function ClientContractView() {
                 return;
             }
 
-            // CRASH FIX: Using getCanvas() instead of getTrimmedCanvas() to avoid trim-canvas dependency issues
             const canvas = sigCanvas.current.getCanvas();
             if (!canvas) {
                 showToast("Erro ao capturar assinatura.", 'error');
@@ -123,28 +122,87 @@ export function ClientContractView() {
             }
             const signature = canvas.toDataURL('image/png');
 
-            if (!resolvedId) {
-                showToast("Erro interno: ID do contrato não encontrado.", 'error');
+            if (!resolvedId || !contract) {
+                showToast("Erro interno: Dados do contrato não disponíveis.", 'error');
                 return;
             }
 
             setIsSigning(true);
+            showToast("Salvando assinatura...", 'info');
 
+            // 1. Prepare Data
+            const signedAt = new Date();
+            const contractWithAudit = {
+                ...contract,
+                clientSignature: signature,
+                ipAddress,
+                userAgent: navigator.userAgent,
+                signedAt: signedAt,
+                termsAccepted: true,
+                id: resolvedId
+            };
+
+            // 2. Trigger n8n Webhook (Fire and Forget or Await?) -> Await to confirm delivery
+            // We'll try to send it. If it fails, we still save the signature but warn the user.
+            let emailSentViaWebhook = false;
+
+            // Only try if URL is set (even if placeholder, it will fail gracefully)
+            if (N8N_WEBHOOK_URL && N8N_WEBHOOK_URL.length > 10) {
+                try {
+                    // Use Public URL provided by user
+                    const ZAFIRA_SIGNATURE_URL = "https://i.ibb.co/RTtKWqqh/image.png";
+
+                    // Generate PDF Blob
+                    const pdfBlob = await generateContractPDF(contractWithAudit, ZAFIRA_SIGNATURE_URL, signature, zafiraLogo, true, true);
+
+                    if (pdfBlob) {
+                        const formData = new FormData();
+                        // Prioritize form email, then contract email, then fallback
+                        const emailToSend = recipientEmail || contract.email;
+
+                        if (emailToSend) {
+                            formData.append('email', emailToSend);
+                            formData.append('contract_id', resolvedId);
+                            formData.append('client_name', contract.razaoSocial);
+                            formData.append('file', pdfBlob as Blob, `Contrato_${contract.razaoSocial.replace(/\s+/g, '_')}.pdf`);
+
+                            await fetch(N8N_WEBHOOK_URL, {
+                                method: 'POST',
+                                body: formData
+                            });
+                            emailSentViaWebhook = true;
+                        } else {
+                            console.warn("No email found for webhook dispatch");
+                        }
+                    }
+                } catch (webhookErr) {
+                    console.error("Webhook trigger failed", webhookErr);
+                    // Non-blocking error for signature saving, but we log it
+                }
+            }
+
+            // 3. Update Firestore
             const docRef = doc(db, "contracts", resolvedId);
-
-            // Saving Legal Metadata
             await updateDoc(docRef, {
                 status: 'signed',
                 clientSignature: signature,
-                signedAt: new Date(),
+                signedAt: signedAt,
                 ipAddress: ipAddress,
                 userAgent: navigator.userAgent,
-                termsAccepted: true
+                termsAccepted: true,
+                sentToEmail: recipientEmail || contract.email || null,
+                emailStatus: emailSentViaWebhook ? 'sent_via_webhook' : 'pending' // Track status
             });
 
             setSignatureData(signature);
             setStatus('signed');
-            showToast("✅ Assinatura salva com sucesso! Log de auditoria gerado.", 'success');
+
+            if (emailSentViaWebhook) {
+                showToast("✅ Assinado! Uma cópia foi enviada para seu e-mail.", 'success');
+                setEmailSent(true);
+            } else {
+                showToast("✅ Assinatura salva com sucesso!", 'success');
+            }
 
         } catch (e: any) {
             console.error("Critical Error in handleSign:", e);
@@ -367,132 +425,10 @@ export function ClientContractView() {
                         </div>
                     </div>
                 )}
-
-                {/* Success Badge & Email Action */}
-                {status === 'signed' && (
-                    <div className="p-8 flex flex-col items-center gap-4 bg-green-50 border-t border-green-100 mt-8 rounded-b-lg">
-                        <div className="flex items-center gap-2 text-green-700 font-bold text-lg">
-                            <ShieldCheck size={24} />
-                            Contrato Assinado e Validado!
-                        </div>
-                        <p className="text-xs text-center text-green-800 max-w-md mb-4">
-                            O documento foi registrado com sucesso em nossa base segura, incluindo Log de Auditoria com IP ({ipAddress}) e Carimbo de Tempo.
-                        </p>
-
-                        {!emailSent ? (
-                            <div className="w-full max-w-md bg-white p-6 rounded-xl border border-green-200 shadow-sm">
-                                <h3 className="text-center font-bold text-gray-800 mb-2">Receber via E-mail</h3>
-                                <p className="text-center text-xs text-gray-500 mb-4">
-                                    Para sua segurança, enviamos o contrato assinado diretamente para o seu e-mail.
-                                </p>
-                                <div className="flex flex-col gap-3">
-                                    <input
-                                        type="email"
-                                        placeholder="Seu melhor e-mail"
-                                        value={recipientEmail}
-                                        onChange={(e) => setRecipientEmail(e.target.value)}
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none text-black"
-                                    />
-                                    <button
-                                        onClick={async () => {
-                                            if (!recipientEmail.includes('@') || !recipientEmail.includes('.')) {
-                                                showToast("Digite um e-mail válido!", 'error');
-                                                return;
-                                            }
-
-                                            // N8N WEBHOOK URL - Replace this with your actual N8N Webhook URL
-                                            const N8N_WEBHOOK_URL = "";
-
-                                            try {
-                                                if (resolvedId && contract) {
-                                                    let uploadSuccess = false;
-
-                                                    // 1. Generate PDF Blob
-                                                    const contractWithAudit = {
-                                                        ...contract,
-                                                        clientSignature: signatureData || undefined, // Fix type compatibility
-                                                        ipAddress,
-                                                        userAgent: navigator.userAgent,
-                                                        signedAt: new Date(),
-                                                        termsAccepted: true,
-                                                        id: resolvedId
-                                                    };
-
-                                                    // Generate PDF Blob
-                                                    // Note: We need to import the generatePDF function again or ensure it's available
-                                                    // Since we removed it from imports earlier, we'll need to re-add it or rely on a different flow.
-                                                    // Assuming we restore the import or use the existing logic if it was kept.
-                                                    // Checking imports... we removed it. I will re-add the import in a separate step.
-                                                    // For now, let's write the logic assuming the function is available.
-
-                                                    // Actually, a better approach for reliability if imports are messy:
-                                                    // Just update the Firestore status and let the user know, 
-                                                    // UNLESS they specifically want the Frontend to push the file.
-
-                                                    // IF N8N URL IS PROVIDED:
-                                                    if (N8N_WEBHOOK_URL) {
-                                                        showToast("Gerando PDF e enviando...", 'info');
-
-                                                        // We need the generate function here. 
-                                                        // I will assume the import is restored or will be restored.
-                                                        const pdfBlob = await generateContractPDF(contractWithAudit, zafiraSignature, signatureData, zafiraLogo, true, true);
-
-                                                        const formData = new FormData();
-                                                        formData.append('email', recipientEmail);
-                                                        formData.append('contract_id', resolvedId);
-                                                        formData.append('client_name', contract.razaoSocial);
-                                                        formData.append('file', pdfBlob as Blob, `Contrato_${contract.razaoSocial.replace(/\s+/g, '_')}.pdf`);
-
-                                                        await fetch(N8N_WEBHOOK_URL, {
-                                                            method: 'POST',
-                                                            body: formData
-                                                        });
-                                                        uploadSuccess = true;
-                                                    }
-
-                                                    // 2. Update Firestore (Always do this as backup/log)
-                                                    const docRef = doc(db, "contracts", resolvedId);
-                                                    await updateDoc(docRef, {
-                                                        sentToEmail: recipientEmail,
-                                                        emailStatus: uploadSuccess ? 'sent_via_webhook' : 'pending_send',
-                                                        emailRequestedAt: new Date()
-                                                    });
-
-                                                    setEmailSent(true);
-                                                    showToast("Solicitação de envio recebida com sucesso!", 'success');
-                                                }
-                                            } catch (e) {
-                                                console.error("Error saving email", e);
-                                                showToast("Erro ao processar envio.", 'error');
-                                            }
-                                        }}
-                                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-[0.98]"
-                                    >
-                                        <CheckCircle size={20} />
-                                        Enviar para meu E-mail
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="bg-white p-6 rounded-xl border border-green-200 shadow-sm text-center animate-in fade-in slide-in-from-bottom-2">
-                                <CheckCircle size={48} className="text-green-500 mx-auto mb-3" />
-                                <h3 className="font-bold text-gray-800 mb-1">E-mail Cadastrado!</h3>
-                                <p className="text-sm text-gray-600">
-                                    Em breve você receberá o contrato assinado em: <br />
-                                    <span className="font-bold text-green-700">{recipientEmail}</span>
-                                </p>
-                                <p className="text-[10px] text-gray-400 mt-4">
-                                    Verifique também sua caixa de Spam/Lixo Eletrônico.
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
-
-            {/* Footer Credit */}
-            <div className="text-center mt-8 text-gray-500 text-xs">
-                Desenvolvido por Zafira Laboratório Criativo
+                {/* Footer Credit */}
+                <div className="text-center mt-8 text-gray-500 text-xs">
+                    Desenvolvido por Zafira Laboratório Criativo
+                </div>
             </div>
 
             {/* TERMS MODAL */}

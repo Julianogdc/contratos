@@ -131,6 +131,7 @@ export const ContractForm: React.FC<ContractFormProps> = ({ onGenerate, extraBut
                 <InputGroup label="Endereço (Rua, Nº)" name="enderecoEmpresa" value={formData.enderecoEmpresa} onChange={handleChange} width="half" />
                 <InputGroup label="CEP" name="cepEmpresa" value={formData.cepEmpresa} onChange={handleChange} placeholder="00000-000" width="half" />
                 <InputGroup label="Cidade/UF" name="cidadeEmpresa" value={formData.cidadeEmpresa} onChange={handleChange} placeholder="Campo Grande" width="half" />
+                <InputGroup label="E-mail do Cliente" name="email" value={formData.email || ''} onChange={handleChange} placeholder="cliente@exemplo.com" width="half" />
             </div>
 
             <SectionTitle>Representante Legal</SectionTitle>

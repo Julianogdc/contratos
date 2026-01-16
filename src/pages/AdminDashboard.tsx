@@ -8,7 +8,7 @@ import zafiraSignature from '../assets/zafira-signature.png';
 import zafiraLogo from '../assets/zafira-logo.png';
 import { generateContractPDF } from '../utils/generatePDF';
 import { db } from '../lib/firebase';
-import { collection, addDoc, getDocs, query, orderBy, limit, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, limit, deleteDoc, doc } from 'firebase/firestore';
 
 export function AdminDashboard() {
     const [clientSignature, setClientSignature] = useState<string | null>(null);
@@ -107,6 +107,19 @@ export function AdminDashboard() {
             showToast("Erro ao zerar dados.", 'error');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDeleteContract = async (id: string) => {
+        if (!confirm("Tem certeza que deseja apagar este contrato?")) return;
+
+        try {
+            await deleteDoc(doc(db, "contracts", id));
+            setContracts(prev => prev.filter(c => c.id !== id));
+            showToast("Contrato apagado com sucesso!", 'success');
+        } catch (error) {
+            console.error("Error deleting contract:", error);
+            showToast("Erro ao apagar contrato.", 'error');
         }
     };
 
@@ -250,6 +263,13 @@ export function AdminDashboard() {
                                                     <Download size={16} />
                                                 </button>
                                             )}
+                                            <button
+                                                onClick={() => handleDeleteContract(contract.id)}
+                                                className="p-2 hover:bg-red-500/10 rounded-lg text-zafira-muted hover:text-red-400 transition-colors"
+                                                title="Apagar Contrato"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
                                         </div>
                                     </div>
                                 ))}

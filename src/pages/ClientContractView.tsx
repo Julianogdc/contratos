@@ -7,7 +7,7 @@ import SignatureCanvas from 'react-signature-canvas';
 import { generateContractPDF } from '../utils/generatePDF';
 import zafiraSignature from '../assets/zafira-signature.png';
 import zafiraLogo from '../assets/zafira-logo.png';
-import { ShieldCheck, X, CheckCircle, AlertTriangle, Info } from 'lucide-react';
+import { X, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 
 export function ClientContractView() {
     const { id } = useParams();
@@ -18,7 +18,6 @@ export function ClientContractView() {
 
     const [resolvedId, setResolvedId] = useState<string | null>(null);
     const [recipientEmail, setRecipientEmail] = useState('');
-    const [emailSent, setEmailSent] = useState(false);
 
     // Legal & Compliance State
     const [ipAddress, setIpAddress] = useState<string>('');
@@ -199,7 +198,6 @@ export function ClientContractView() {
 
             if (emailSentViaWebhook) {
                 showToast("✅ Assinado! Uma cópia foi enviada para seu e-mail.", 'success');
-                setEmailSent(true);
             } else {
                 showToast("✅ Assinatura salva com sucesso!", 'success');
             }

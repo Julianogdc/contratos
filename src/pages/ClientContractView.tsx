@@ -95,9 +95,10 @@ export function ClientContractView() {
     };
 
     // N8N WEBHOOK URL - Replace with actual URL
-    const N8N_WEBHOOK_URL = "https://contratos-n8n.hvrb9d.easypanel.host/webhook/send-contract";
+    const N8N_WEBHOOK_URL = "https://n8n.zafiramkt.com.br/webhook/send-contract-signed";
 
     const handleSign = async () => {
+        console.log("Create Contract: Button Clicked");
         if (!termsAccepted) {
             showToast("⚠️ Por favor, leia e aceite os Termos e Condições para continuar.", 'error');
             return;
@@ -105,29 +106,34 @@ export function ClientContractView() {
 
         try {
             if (!sigCanvas.current) {
+                console.error("Signature canvas Ref is null");
                 showToast("Erro: Componente de assinatura não carregou. Tente recarregar a página.", 'error');
                 return;
             }
 
             if (sigCanvas.current.isEmpty()) {
+                console.warn("Signature is empty");
                 showToast("✍️ Por favor, faça sua assinatura no quadro antes de confirmar.", 'error');
                 return;
             }
 
             const canvas = sigCanvas.current.getCanvas();
             if (!canvas) {
+                console.error("Canvas object is null");
                 showToast("Erro ao capturar assinatura.", 'error');
                 return;
             }
             const signature = canvas.toDataURL('image/png');
+            console.log("Signature captured successfully");
 
             if (!resolvedId || !contract) {
+                console.error("Missing contract data", { resolvedId, contract });
                 showToast("Erro interno: Dados do contrato não disponíveis.", 'error');
                 return;
             }
 
             setIsSigning(true);
-            showToast("Salvando assinatura...", 'info');
+            showToast("Gerando documento e salvando...", 'info');
 
             // 1. Prepare Data
             const signedAt = new Date();
@@ -141,22 +147,20 @@ export function ClientContractView() {
                 id: resolvedId
             };
 
-            // 2. Trigger n8n Webhook (Fire and Forget or Await?) -> Await to confirm delivery
-            // We'll try to send it. If it fails, we still save the signature but warn the user.
+            // 2. Trigger n8n Webhook
             let emailSentViaWebhook = false;
 
-            // Only try if URL is set (even if placeholder, it will fail gracefully)
             if (N8N_WEBHOOK_URL && N8N_WEBHOOK_URL.length > 10) {
                 try {
-                    // Use Public URL provided by user
+                    console.log("Starting PDF generation for webhook...");
                     const ZAFIRA_SIGNATURE_URL = "https://i.ibb.co/RTtKWqqh/image.png";
 
                     // Generate PDF Blob
                     const pdfBlob = await generateContractPDF(contractWithAudit, ZAFIRA_SIGNATURE_URL, signature, zafiraLogo, true, true);
+                    console.log("PDF generated. Blob size:", pdfBlob ? (pdfBlob as Blob).size : "null");
 
                     if (pdfBlob) {
                         const formData = new FormData();
-                        // Prioritize form email, then contract email, then fallback
                         const emailToSend = recipientEmail || contract.email;
 
                         if (emailToSend) {
@@ -165,22 +169,35 @@ export function ClientContractView() {
                             formData.append('client_name', contract.razaoSocial);
                             formData.append('file', pdfBlob as Blob, `Contrato_${contract.razaoSocial.replace(/\s+/g, '_')}.pdf`);
 
-                            await fetch(N8N_WEBHOOK_URL, {
+                            console.log("Sending POST to n8n:", N8N_WEBHOOK_URL);
+                            const response = await fetch(N8N_WEBHOOK_URL, {
                                 method: 'POST',
                                 body: formData
                             });
-                            emailSentViaWebhook = true;
+                            console.log("n8n Response:", response.status, response.statusText);
+
+                            if (response.ok) {
+                                emailSentViaWebhook = true;
+                                console.log("n8n success");
+                            } else {
+                                console.warn(`Webhook Error: ${response.status}`);
+                                showToast(`Aviso: n8n retornou erro ${response.status}. Verifique se está Ativo.`, 'error');
+                            }
                         } else {
                             console.warn("No email found for webhook dispatch");
                         }
                     }
-                } catch (webhookErr) {
-                    console.error("Webhook trigger failed", webhookErr);
-                    // Non-blocking error for signature saving, but we log it
+                } catch (webhookErr: any) {
+                    console.error("Webhook triggered EXCEPTION:", webhookErr);
+                    // Specifically check for Failed to fetch (CORS)
+                    if (webhookErr.message && webhookErr.message.includes('Failed to fetch')) {
+                        showToast("Erro de conexão (CORS) com n8n. Verifique se o n8n permite requisições desse domínio.", 'error');
+                    }
                 }
             }
 
             // 3. Update Firestore
+            console.log("Updating Firestore...");
             const docRef = doc(db, "contracts", resolvedId);
             await updateDoc(docRef, {
                 status: 'signed',
@@ -190,8 +207,9 @@ export function ClientContractView() {
                 userAgent: navigator.userAgent,
                 termsAccepted: true,
                 sentToEmail: recipientEmail || contract.email || null,
-                emailStatus: emailSentViaWebhook ? 'sent_via_webhook' : 'pending' // Track status
+                emailStatus: emailSentViaWebhook ? 'sent_via_webhook' : 'pending'
             });
+            console.log("Firestore updated.");
 
             setSignatureData(signature);
             setStatus('signed');
@@ -199,14 +217,15 @@ export function ClientContractView() {
             if (emailSentViaWebhook) {
                 showToast("✅ Assinado! Uma cópia foi enviada para seu e-mail.", 'success');
             } else {
-                showToast("✅ Assinatura salva com sucesso!", 'success');
+                showToast("✅ Assinatura salva! (Envio de email pendente)", 'success');
             }
 
         } catch (e: any) {
             console.error("Critical Error in handleSign:", e);
-            showToast(`Ocorreu um erro ao assinar: ${e.message}`, 'error');
+            showToast(`Ocorreu um erro crítico: ${e.message}`, 'error');
         } finally {
             setIsSigning(false);
+            console.log("Process finished.");
         }
     };
 

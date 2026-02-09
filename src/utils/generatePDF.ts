@@ -412,8 +412,7 @@ export const generateContractPDF = async (data: ContractData, contractorSignatur
             { label: "ID do Documento", value: docId },
             { label: "Hash Assinatura (Simulado)", value: docHash.substring(0, 32).toUpperCase() },
             { label: "Endereço IP", value: data.ipAddress || "Não registrado (Assinatura Local)" },
-            { label: "Data/Hora (UTC)", value: data.signedAt ? new Date(data.signedAt.seconds ? data.signedAt.seconds * 1000 : data.signedAt).toUTCString() : new Date().toUTCString() },
-            { label: "Data/Hora (Brasília)", value: data.signedAt ? new Date(data.signedAt.seconds ? data.signedAt.seconds * 1000 : data.signedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : new Date().toLocaleString('pt-BR') },
+            { label: "Data/Hora", value: data.signedAt ? new Date(data.signedAt.seconds ? data.signedAt.seconds * 1000 : (typeof data.signedAt === 'string' ? data.signedAt : (data.signedAt instanceof Date ? data.signedAt.toISOString() : new Date().toISOString()))).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) },
             { label: "User Agent", value: data.userAgent ? data.userAgent.substring(0, 50) + "..." : "Não registrado" }
         ]);
 

@@ -12,7 +12,8 @@ import { X, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 export function ClientContractView() {
     const { id } = useParams();
     const [contract, setContract] = useState<ContractData | null>(null);
-    const [status, setStatus] = useState<'loading' | 'pending' | 'signed'>('loading');
+    const [status, setStatus] = useState<'loading' | 'pending' | 'signed' | 'error'>('loading');
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [signatureData, setSignatureData] = useState<string | null>(null);
     const sigCanvas = useRef<SignatureCanvas>(null);
 
@@ -78,13 +79,19 @@ export function ClientContractView() {
                     if (data.clientSignature) setSignatureData(data.clientSignature);
                     if (data.email) setRecipientEmail(data.email);
                 } else {
+                    setStatus('error');
+                    setErrorMsg("Contrato não encontrado. Verifique o link e tente novamente.");
                     showToast("Contrato não encontrado!", 'error');
                 }
-            } catch (e) {
+            } catch (e: any) {
                 console.error("Error fetching contract:", e);
-                showToast("Erro ao carregar o contrato. Tente novamente.", 'error');
-            } finally {
-                if (status === 'loading') setStatus('pending');
+                setStatus('error');
+                if (e.code === 'failed-precondition' || e.message?.includes('offline')) {
+                    setErrorMsg("Erro de conexão. Pareçe que algo está bloqueando o acesso ao sistema. Se você usa bloqueadores de anúncio (AdBlock), por favor desative-os para esta página e recarregue.");
+                } else {
+                    setErrorMsg("Erro ao carregar o contrato. Por favor, verifique sua conexão e tente novamente.");
+                }
+                showToast("Erro ao carregar o contrato.", 'error');
             }
         };
         fetchContract();
@@ -229,7 +236,23 @@ export function ClientContractView() {
         }
     };
 
-    if (!contract) return <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center">Carregando contrato...</div>;
+    if (status === 'loading') return <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center">Carregando contrato...</div>;
+
+    if (status === 'error') return (
+        <div className="min-h-screen bg-[#09090b] text-white flex flex-col items-center justify-center p-4 text-center">
+            <AlertTriangle size={48} className="text-red-500 mb-4" />
+            <h1 className="text-2xl font-bold mb-2">Não foi possível carregar o contrato</h1>
+            <p className="text-gray-400 max-w-md">{errorMsg}</p>
+            <button
+                onClick={() => window.location.reload()}
+                className="mt-6 px-6 py-2 bg-zafira-purple rounded-lg font-bold hover:bg-purple-700 transition"
+            >
+                Tentar Novamente
+            </button>
+        </div>
+    );
+
+    if (!contract) return null;
 
     return (
         <div className="min-h-screen bg-[#09090b] py-8 px-4 font-[Helvetica,Arial,sans-serif] relative overflow-hidden">
